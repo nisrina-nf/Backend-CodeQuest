@@ -93,21 +93,6 @@ export const areAllLessonsCompleted = async (client, user_id, course_id) => {
     return total === completed
 }
 
-export const awardXpForLesson = async (client, user_id, lesson_id, xp_amount, source = 'lesson_completion') => {
-    await client.query(`
-        UPDATE users SET xp = xp + $1 WHERE id = $2
-    `, [xp_amount, user_id])
-
-    const xpResult = await client.query(`
-        INSERT INTO xp_transactions 
-        (user_id, xp_amount, source, reference_id)
-        VALUES ($1, $2, $3, $4)
-        RETURNING *
-    `, [user_id, xp_amount, source, lesson_id])
-
-    return xpResult.rows[0]
-}
-
 export const awardXpForCourse = async (client, user_id, course_id, xp_amount) => {
     await client.query(`
         UPDATE users SET xp = xp + $1 WHERE id = $2
@@ -121,40 +106,4 @@ export const awardXpForCourse = async (client, user_id, course_id, xp_amount) =>
     `, [user_id, xp_amount, course_id])
 
     return xpResult.rows[0]
-}
-
-export const checkAndAwardBadges = async (client, user_id, course_id) => {
-    const completionResult = await client.query(`
-        SELECT COUNT(*) as completed_courses
-        FROM course_enrollments 
-        WHERE user_id = $1 AND status = 'completed'
-    `, [user_id])
-
-    const completedCourses = parseInt(completionResult.rows[0].completed_courses)
-
-    const badges = await client.query(`
-        SELECT * FROM badges 
-        WHERE course_id = $1 
-        OR (name LIKE 'Course Master%' AND $2 >= CAST(SUBSTRING(name FROM 'Course Master (\d+)') AS INTEGER))
-    `, [course_id, completedCourses])
-
-    const awardedBadges = []
-    for(const badge of badges.rows) {
-        const existingBadge = await client.query(`
-            SELECT * FROM user_badges 
-            WHERE user_id = $1 AND badge_id = $2
-        `, [user_id, badge.id])
-
-        if(existingBadge.rows.length === 0) {
-            await client.query(`
-                INSERT INTO user_badges (user_id, badge_id, earned_at)
-                VALUES ($1, $2, NOW())
-            `, [user_id, badge.id])
-            if (badge.xp_reward > 0) {
-                await awardXpForLesson(client, user_id, null, badge.xp_reward, 'badge_award');
-            }
-            awardedBadges.push(badge)
-        }
-    }
-    return awardedBadges
 }

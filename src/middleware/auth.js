@@ -55,7 +55,7 @@ export const verifyToken = async (req, res, next) => {
                 message: 'Token expired'
             })
         }
-        console.error('Auth error:', err);
+        console.error('Auth error:', err)
         return res.status(500).json({
             success: false,
             message: 'Authentication failed'

@@ -226,7 +226,6 @@ export const getLeaderboardStats = async (req, res) => {
         return successResponse(res, responseData, 'Leaderboard statistics retrieved successfully')
         
     } catch (err) {
-        console.error('Get leaderboard stats error:', err)
         return errorResponse(res, 'Failed to get leaderboard statistics', 500, err)
     }
 }

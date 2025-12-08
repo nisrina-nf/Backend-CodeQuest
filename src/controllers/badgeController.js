@@ -1,7 +1,7 @@
 import { errorResponse, notFoundResponse, successResponse, withPagination } from "../helper/common.js"
 import { validateRequiredFields } from '../helper/validation.js'
 import { deleteFromCloudinary, extractPublicId, uploadToCloudinary } from "../helper/upload.js"
-import { countDataBadges, createBadge, deleteBadge, getAllBadgesPaginate, getBadgeById, updateBadge } from "../models/badgeModel.js"
+import { countDataBadges, createBadge, deleteBadge, getAllBadgesPaginate, getBadgeById, getUserBadges, updateBadge } from "../models/badgeModel.js"
 import { getCourseById } from "../models/courseModel.js"
 
 export const getBadges = async (req, res) => {
@@ -123,5 +123,28 @@ export const removeBadge = async (req, res) => {
     } catch (err) {
         if(err.code === '23503') return errorResponse(res, 'Cannot delete badge because it has related data', 409)
         return errorResponse(res, 'Error deleting badge', 500, err)
+    }
+}
+
+export const getMyBadges = async (req, res) => {
+    try {
+        const user_id = req.user.id
+        const badges = await getUserBadges(user_id)
+
+        const responseData = {
+            totalBadges: badges.length,
+            badges: badges.map(badge => ({
+                id: badge.id,
+                name: badge.name,
+                description: badge.description,
+                iconUrl: badge.icon_url,
+                xpReward: badge.xp_reward,
+                earnedAt: badge.earned_at
+            }))
+        }
+
+        return successResponse(res, responseData, 'Badge retrieved successfully')
+    } catch (err) {
+        return errorResponse(res, 'Failed to retrieve badges', 500, err)
     }
 }

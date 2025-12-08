@@ -1,7 +1,9 @@
 import pool from "../config/db.js"
 import { errorResponse, notFoundResponse, successResponse } from "../helper/common.js"
+import { checkAndAwardCourseBadge } from "../models/badgeModel.js"
 import { getLessonOrder, getLessonWithCourse, getTotalLessonsInCourse } from "../models/lessonModel.js"
-import { areAllLessonsCompleted, awardXpForCourse, awardXpForLesson, checkAndAwardBadges, checkCourseEnrollment, completeLesson, getCourseProgressStats, getLessonProgress, getNextLesson, updateCourseEnrollmentProgress } from "../models/lessonProgressModel.js"
+import { areAllLessonsCompleted, awardXpForCourse, checkCourseEnrollment, completeLesson, getCourseProgressStats, getLessonProgress, getNextLesson, updateCourseEnrollmentProgress } from "../models/lessonProgressModel.js"
+import { updateStreak } from "../models/streakModel.js"
 
 export const finishLesson = async (req, res) => {
     const client = await pool.connect()
@@ -38,9 +40,6 @@ export const finishLesson = async (req, res) => {
         }
 
         await completeLesson(client, user_id, lesson_id)
-
-        const lessonXp = 25
-        await awardXpForLesson(client, user_id, lesson_id, lessonXp)
         
         const progressStats = await getCourseProgressStats(client, user_id, lesson.course_id)
         const totalLessons = await getTotalLessonsInCourse(lesson.course_id)
@@ -50,31 +49,28 @@ export const finishLesson = async (req, res) => {
         const allCompleted = await areAllLessonsCompleted(client, user_id, lesson.course_id)
 
         let courseCompletionData = null
-        let awardedBadges = []
-
+        let awardedBadge = null
+        
         if(allCompleted) {
             if(lesson.course_xp_reward > 0) {
                 await awardXpForCourse(client, user_id, lesson.course_id, lesson.course_xp_reward)
             }
-
-            awardedBadges = await checkAndAwardBadges(client, user_id, lesson.course_id)
-
+            
+            awardedBadge = await checkAndAwardCourseBadge(client, user_id, lesson.course_id)
+            
             courseCompletionData = {
                 courseCompleted: true,
                 xpAwarded: lesson.course_xp_reward,
-                badgesAwarded: awardedBadges.map(b => ({
-                    id: b.id,
-                    name: b.name,
-                    iconUrl: b.icon_url,
-                    xpReward: b.xp_reward
-                }))
+                badge: awardedBadge
             }
         }
 
-        const totalXpEarned = lessonXp + (allCompleted ? lesson.course_xp_reward : 0)
+        const totalXpEarned = allCompleted ? lesson.course_xp_reward : 0
 
         const lessonOrder = await getLessonOrder(lesson_id)
         const nextLesson = await getNextLesson(lesson.course_id, lessonOrder.order_index)
+
+        await updateStreak(client, user_id)
 
         await client.query('COMMIT')
 
@@ -92,8 +88,7 @@ export const finishLesson = async (req, res) => {
                 status: allCompleted ? 'course_completed' : 'in_progress'
             },
             rewards: {
-                xpEarned: lessonXp,
-                totalXpEarned: totalXpEarned
+                xpEarned: totalXpEarned,
             },
             nextLesson: nextLesson ? {
                 id: nextLesson.id,
@@ -188,7 +183,6 @@ export const startLesson = async (req, res) => {
         
     } catch (err) {
         await client.query('ROLLBACK') 
-        console.error('Start lesson error:', err) 
         
         return errorResponse(res, 'Failed to start lesson', 500, err) 
     } finally {
@@ -200,7 +194,6 @@ export const lessonProgress = async (req, res) => {
     try {
         const user_id = req.user.id 
         const lesson_id = req.params.lesson_id 
-        console.log(lesson_id)
         
         const lesson = await getLessonWithCourse(lesson_id) 
         if (!lesson) {
@@ -266,7 +259,6 @@ export const lessonProgress = async (req, res) => {
         return successResponse(res, responseData, 'Lesson progress retrieved successfully') 
         
     } catch (err) {
-        console.error('Get lesson progress error:', err) 
         return errorResponse(res, 'Failed to get lesson progress', 500, err) 
     }
 }
@@ -312,30 +304,7 @@ export const courseProgress = async (req, res) => {
         const totalLessons = lessonsResult.rows.length 
         const completedLessons = lessonsResult.rows.filter(l => l.status === 'completed').length 
         const inProgressLessons = lessonsResult.rows.filter(l => l.status === 'in_progress').length 
-        
-        const xpResult = await pool.query(`
-            SELECT 
-                COALESCE(SUM(CASE 
-                    WHEN source = 'lesson_completion' THEN xp_amount
-                    ELSE 0
-                END), 0) as lesson_xp,
-                COALESCE(SUM(CASE 
-                    WHEN source = 'course_completion' THEN xp_amount
-                    ELSE 0
-                END), 0) as course_xp
-            FROM xp_transactions
-            WHERE user_id = $1 
-                AND (
-                    reference_id::text IN (
-                        SELECT id::text FROM lessons WHERE course_id = $2
-                    )
-                    OR reference_id = $2::integer
-                )
-        `, [user_id, course_id]) 
-        
-        const xpEarned = xpResult.rows[0] || { lesson_xp: 0, course_xp: 0 } 
-        const totalXpEarned = xpEarned.lesson_xp + xpEarned.course_xp 
-        
+                
         const responseData = {
             course: {
                 id: course.id,
@@ -359,12 +328,6 @@ export const courseProgress = async (req, res) => {
                     inProgress: inProgressLessons,
                     notStarted: totalLessons - completedLessons - inProgressLessons,
                     completionRate: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0
-                },
-                xp: {
-                    earned: totalXpEarned,
-                    fromLessons: xpEarned.lesson_xp,
-                    fromCourse: xpEarned.course_xp,
-                    remaining: Math.max(0, course.xp_reward - totalXpEarned)
                 }
             },
             lessons: lessonsResult.rows.map(lesson => ({
@@ -381,7 +344,6 @@ export const courseProgress = async (req, res) => {
         return successResponse(res, responseData, 'Course progress retrieved successfully') 
         
     } catch (err) {
-        console.error('Get course progress error:', err) 
         return errorResponse(res, 'Failed to get course progress', 500, err) 
     }
 }

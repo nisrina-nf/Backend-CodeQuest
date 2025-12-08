@@ -85,7 +85,6 @@ export const showCourses = async (req, res) => {
         return successResponse(res, responseData, 'Courses retrieved successfully')
         
     } catch (err) {
-        console.error('Show courses error:', err)
         return errorResponse(res, 'Failed to retrieve courses', 500, err)
     }
 }
@@ -165,7 +164,6 @@ export const showCourseDetail = async (req, res) => {
         return successResponse(res, responseData, 'Course details retrieved')
         
     } catch (err) {
-        console.error('Course detail error:', err)
         return errorResponse(res, 'Failed to retrieve course details', 500, err)
     }
 }
@@ -247,7 +245,6 @@ export const showQuizCollections = async (req, res) => {
         return successResponse(res, responseData, 'Quiz collections retrieved')
         
     } catch (err) {
-        console.error('Browse collections error:', err)
         return errorResponse(res, 'Failed to retrieve collections', 500, err)
     }
 }
@@ -316,7 +313,6 @@ export const showQuizCollectionDetail = async (req, res) => {
         return successResponse(res, responseData, 'Collection details retrieved')
         
     } catch (err) {
-        console.error('Collection detail error:', err)
         return errorResponse(res, 'Failed to retrieve collection details', 500, err)
     }
 }

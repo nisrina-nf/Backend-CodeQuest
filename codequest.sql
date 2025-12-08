@@ -151,6 +151,7 @@ create table user_streaks (
 	user_id integer not null references users(id) on delete cascade,
 	login_date date not null default current_date,
 	streak_count integer not null default 1,
+	xp_earned integer default 0,
 	created_at timestamp default current_timestamp,
 	unique(user_id, login_date)
 );
@@ -171,6 +172,8 @@ create index idx_lesson_progress_user_lesson on lesson_progress(user_id, lesson_
 create index idx_user_answers_user_question on user_answers(user_id, question_id);
 create index idx_quiz_attempts_user_quiz on quiz_attempts(user_id, quiz_id, score desc);
 create index idx_xp_transactions_user_date on xp_transactions(user_id, created_at desc);
+create index idx_user_streaks_user_date on user_streaks(user_id, login_date desc);
+create index idx_user_streaks_streak on user_streaks(user_id, streak_count desc);
 
 create or replace function update_user_level()
 returns trigger as $$

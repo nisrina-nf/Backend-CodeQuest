@@ -2,6 +2,7 @@ import pool from "../config/db.js"
 import { errorResponse, notFoundResponse, successResponse } from "../helper/common.js"
 import { calculateXpEarned, createQuizAttempt, getAttemptDetails, getUserBestAttempt, logXpTransaction, saveUserAnswers, updateUserXp } from "../models/quizAttemptModel.js"
 import { getQuizCorrectAnswers, getQuizQuestions, getQuizWithQuestions, getUserQuizAttempt } from "../models/quizModel.js"
+import { updateStreak } from "../models/streakModel.js"
 
 export const startQuiz = async (req, res) => {
     try {
@@ -117,6 +118,8 @@ export const submitQuiz = async (req, res) => {
                 reference_id: quiz_id
             })
         }
+
+        await updateStreak(client, user_id)
 
         await client.query('COMMIT')
 

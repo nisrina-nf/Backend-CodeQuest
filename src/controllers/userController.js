@@ -265,3 +265,45 @@ export const editProfile = async (req, res) => {
         client.release()
     }
 }
+
+export const getMyStats = async (req, res) => {
+    try {
+        const user_id = req.user.id
+
+        const userResult = await pool.query(`
+            SELECT
+                id,
+                username,
+                email,
+                avatar_url,
+                xp,
+                level, 
+                streak,
+                last_active,
+                created_at
+            FROM users
+            WHERE id = $1    
+        `, [user_id])
+
+        const user = userResult.rows[0]
+
+        const responseData = {
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                avatarUrl: user.avatar_url,
+                joinedSince: user.created_at
+            },
+            stats: {
+                xp: user.xp,
+                level: user.level,
+                streak: user.streak,
+                lastActive: user.last_active
+            }
+        }
+        return successResponse(res, responseData, 'User stats retrieved successfully')
+    } catch (err) {
+        return errorResponse(res, 'Failed to retrieve user stats', 500, err)
+    }
+}
