@@ -5,10 +5,7 @@ dotenv.config()
 const { Pool } = pkg
 
 const pool = new Pool ({
-    connectionString: process.env.POSTGRES_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    connectionString: process.env.POSTGRES_URL
 })
 
 export default pool
