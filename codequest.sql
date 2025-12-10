@@ -146,16 +146,6 @@ create table xp_transactions (
 	created_at timestamp default current_timestamp
 );
 
-create table user_streaks (
-	id serial primary key,
-	user_id integer not null references users(id) on delete cascade,
-	login_date date not null default current_date,
-	streak_count integer not null default 1,
-	xp_earned integer default 0,
-	created_at timestamp default current_timestamp,
-	unique(user_id, login_date)
-);
-
 create table level_configurations (
 	level integer primary key check (level >= 1),
 	xp_required integer not null check (xp_required >= 0),
@@ -172,8 +162,6 @@ create index idx_lesson_progress_user_lesson on lesson_progress(user_id, lesson_
 create index idx_user_answers_user_question on user_answers(user_id, question_id);
 create index idx_quiz_attempts_user_quiz on quiz_attempts(user_id, quiz_id, score desc);
 create index idx_xp_transactions_user_date on xp_transactions(user_id, created_at desc);
-create index idx_user_streaks_user_date on user_streaks(user_id, login_date desc);
-create index idx_user_streaks_streak on user_streaks(user_id, streak_count desc);
 
 create or replace function update_user_level()
 returns trigger as $$
@@ -266,41 +254,6 @@ after insert or update on lesson_progress
 for each row
 when(new.status = 'completed')
 execute function update_course_progress();
-
-create or replace function update_user_streak()
-returns trigger as $$
-declare
-	last_streak_date date;
-	current_streak integer;
-begin
-	select max(login_date) into last_streak_date
-	from user_streaks
-	where user_id = new.user_id
-		and login_date < current_date;
-	if last_streak_date = current_date - interval '1 day' then
-		current_streak := (
-			select streak_count
-			from user_streaks
-			where user_id = new.user_id
-				and login_date = last_streak_date
-		) + 1;
-	else
-		current_streak := 1;
-	end if;
-	insert into user_streaks(user_id, login_date, streak_count)
-	values (new.user_id, current_date, current_streak)
-	on conflict (user_id, login_date)
-	do update set streak_count = current_streak;
-	
-	update users
-	set streak = current_streak,
-		updated_at = current_timestamp
-	where id = new.user_id;
-	
-	return new;
-end;
-$$ language plpgsql;
-
 
 insert into level_configurations (level, xp_required) values
 (1,0), (2,100), (3, 300), (4, 600), (5, 1000),
